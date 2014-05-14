@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title></title>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <script src='lib/quintus.js'></script>
+        <script src='lib/quintus_sprites.js'></script>
+        <script src='lib/quintus_scenes.js'></script>
+        <script src='lib/quintus_input.js'></script>
+        <script src='lib/quintus_anim.js'></script>
+        <script src='lib/quintus_2d.js'></script>
+        <script src='lib/quintus_touch.js'></script>
+        <script src='lib/quintus_ui.js'></script>
+    </head>
+    <body style="background-color: black;">
+        <script>
+        
+        var Q = Quintus()
+            .include("Sprites, Scenes, Input, 2D, Touch, UI, Anim")
+            .setup({
+                width: 960,
+                height: 640,
+                development: true
+            }).controls().touch();            
+            Q.input.keyboardControls({
+              LEFT: "left",
+              RIGHT: "right",
+              UP: "up",
+              DOWN: "down", 
+              SPACE: "fire", 
+              Z: "fire", 
+              X: "action",
+              80: "esc",
+              79: "view",
+              81: "quit",
+              73: "I",
+              74: "J",
+              75: "K",
+              76: "L",
+              77: "ZOOMIN",
+              78: "ZOOMOUT"
+            });
+        
+        Q.Sprite.extend("God", {
+            init: function(p) {
+              this._super(p, { asset: "blank.png", x: 110, y: 50, timeInvincible: 0, gravity:0});
+              this.add('2d, platformerControls');              
+              
+            },
+
+            step:function(dt){
+                if (Q.inputs['left']){
+                    Q.stage(0).unpause();
+                    Q.clearStage(1);        //resume game
+                }
+            }
+        });
+        
+        //player
+        Q.Sprite.extend("Player",{
+
+            init: function(p) {
+              this._super(p, {sprite:"avatar", sheet:"avatar", x: 110, y: 50, jumpSpeed: -380, lives: 3, coins: 0, timeInvincible: 0, superMode: 0, superJump: 0, breath: 3, god: 0 , scale:0.8});
+              this.add('2d, platformerControls, animation');   
+              this.p.type = Q.SPRITE_FRIENDLY;
+              this.on("hit.sprite", function(collision){
+                  if(collision.obj.isA("Coin")){
+                      collision.obj.destroy();
+                      Q.state.inc("coins", 1);
+                      var coinsLabel = Q("UI.Text", 1).items[1];
+                      coinsLabel.p.label = 'Coins x ' + Q.state.get("coins");
+                      
+                  }
+                  if (collision.obj.isA("Heart")){
+                    collision.obj.destroy();
+                    Q.state.inc("lives", 1);
+                    var livesLabel = Q("UI.Text", 1).items[0];
+                    livesLabel.p.label = 'Lives x ' + Q.state.get("lives");
+                  }
+                  if (collision.obj.isA("Star")){
+                    collision.obj.destroy();
+                    this.p.superMode = 5;
+                  }
+                  if (collision.obj.isA("JumpPotion")){
+                    collision.obj.destroy();
+                    this.p.superJump = 6
+                  }
+                  if(collision.obj.isA("Exit")){
+                        Q.clearStage(0);
+                        Q.stageScene("level"+Q.state.get("nextStage"), 0);
+                        Q.state.inc("currStage", 1);
+                        Q.state.inc("nextStage", 1);
+                        var stageLabel = Q("UI.Text", 1).items[2];
+                          stageLabel.p.label = 'Stage ' + Q.state.get("currStage");
+                        //Q.stageScene("gameStats", 1);
+                  }
+                  if(collision.obj.isA("WinZone")){
+                        Q.clearStages();
+                        Q.stageScene("Ending", 0);
+
+                  }
+
+              });
+              
+
+            },
+            step: function(dt) {
+                var currTile = Q.stage().locate(this.p.x, this.p.y, Q.SPRITE_PARTICLE);
+                if (currTile){
+                    
+                    if (this.p.timeInvincible == 0 && this.p.superMode == 0){
+                        if (this.p.breath > 0){
+                            this.p.breath = Math.max(this.p.breath - dt, 0);
+                        } 
+                    }
+                } else {
+                    if (this.p.breath < 3 && this.p.breath > 0){
+                        this.p.breath = Math.max(this.p.breath + (dt/2), 0);
+                    }
+                }
+                if (this.p.breath == 0){
+                    this.damage();
+                    if(Q.state.get("lives")>=0){
+                        Q.clearStage(0);
+                        Q.stageScene("level"+Q.state.get("currStage"), 0);
+                    }
+                }
+                
+                if (Q.inputs['esc']){
+                    Q.stageScene("pauseGame", 2, { label: "Paused"});
+                }
+
+                if(Q.inputs['left'] && this.p.direction == 'right') {
+                    this.p.jumpSpeed = -380;
+                    this.p.flip = 'x';
+                } else if(Q.inputs['right']  && this.p.direction == 'left') {
+                    this.p.jumpSpeed = -380;
+                    this.p.flip = false;                    
+                }
+                //animation
+                if (Q.inputs['right'] || Q.inputs['left']){
+                    if (this.p.vy == 0){
+                      this.play("move");  
+                    }
+                    
+                } else if (Q.inputs['action'] || Q.inputs['up']){
+                    if (this.p.vy == 0){
+                        this.play("jump");
+                    }
+                } else{
+                    if (this.p.vy == 0){
+                        this.play("no_stroke");
+                    } else {
+                        this.play("fall");
+                    }
+                                    }
+                if(Q.inputs['left'] && this.p.direction == 'left' && this.p.vy == 0){
+                    if (this.p.jumpSpeed > -680){
+                       this.p.jumpSpeed-=5;
+                    }
+                }
+                if(Q.inputs['right'] && this.p.direction == 'right' && this.p.vy == 0){
+                    if (this.p.jumpSpeed > -680){
+                       this.p.jumpSpeed-=5;
+                    }
+                }
+                if (this.p.vy != 0){    //falling / flying
+                    this.p.jumpSpeed = -380;
+                }
+                if (this.p.vy == 0 && this.p.vx == 0){  //stationary
+                    this.p.jumpSpeed = -380;
+                }
+                if (this.p.y>=19*70){
+                    this.damage();
+                    if(Q.state.get("lives")>0){
+                        Q.clearStage(0);
+                        Q.stageScene("level"+Q.state.get("currStage"), 0);
+                    }
+                }
+                if(this.p.timeInvincible > 0){
+                    this.p.sprite = "avatar_flash";
+                    this.p.timeInvincible = Math.max(this.p.timeInvincible - dt, 0);
+                    
+                }
+                if (this.p.timeInvincible == 0){
+                    this.p.sprite = "avatar";
+                }
+                if (this.p.superMode > 0){
+                    this.p.sprite = "superAvatar";
+                    this.p.sheet = "superAvatar";
+                    this.p.superMode = Math.max(this.p.superMode - dt, 0);
+                }
+                if (this.p.superMode == 0){
+                    this.p.sprite = "avatar";
+                    this.p.sheet = "avatar";
+                }
+
+                if (this.p.god == 1){
+                    if (Q.inputs['J']){
+                      //  if (Q.stage(0).viewport.x > 0){
+                            Q.stage(0).moveTo(Q.stage(0).viewport.x-50, Q.stage(0).viewport.y);
+                      //  }
+                    } else if (Q.inputs['L']){
+                       
+                       // if (Q.stage(0).viewport.x < Q.stageWidth){
+                            Q.stage(0).moveTo(Q.stage(0).viewport.x+50, Q.stage(0).viewport.y);
+                       // }
+                    } else if (Q.inputs['I']){
+                        Q.stage(0).moveTo(Q.stage(0).viewport.x, Q.stage(0).viewport.y-50);
+                    } else if (Q.inputs['K']){
+                        Q.stage(0).moveTo(Q.stage(0).viewport.x, Q.stage(0).viewport.y+50);
+                    } else if (Q.inputs['ZOOMIN']){                        
+                        Q.stage(0).viewport.scale-=0.01;
+                    } else if (Q.inputs['ZOOMOUT']){
+                        Q.stage(0).viewport.scale+=0.01;
+                    }
+                }
+
+                if (Q.inputs['view']){  //enter view mode
+                    if (this.p.god == 0){
+                        
+                        Q.stage(0).unfollow();
+                        Q.stage(0).viewport.scale = 1.0;
+                        var invincibleLabel = Q("UI.Text", 1).items[2];
+                        invincibleLabel.p.label = "Stage " + Q.state.get("currStage") + " (Screen Unlocked)";
+                        this.p.god = 1;
+                    } 
+                }
+                if (Q.inputs['quit']){  //exit view mode
+                    if (this.p.god == 1){
+
+                        Q.stage(0).add("viewport").follow(this,{x: true, y: true},{minX: 0, maxX: Q.stageWidth, minY: 0, maxY: Q.stageHeight});
+                        var invincibleLabel = Q("UI.Text", 1).items[2];
+                        invincibleLabel.p.label = "Stage " + Q.state.get("currStage");
+                        this.p.god = 0;
+                    }
+                }
+                if (this.p.superJump > 0){
+                    this.p.superJump= Math.max(this.p.superJump - (dt), 0);
+                    this.p.jumpSpeed = -1300;
+                }
+                
+
+                
+            },
+            
+            damage: function(){
+                if(!this.p.timeInvincible){
+                    Q.state.inc("lives", -1);
+                    this.p.timeInvincible = 1;
+                    var invincibleLabel = Q("UI.Text", 1).items[2];
+                    
+                    if(Q.state.get("lives")<=0){
+                        this.destroy();
+                        Q.stageScene("endGame", 2, {label: "Game Over"});
+                    }
+                    else {
+                        var livesLabel = Q("UI.Text", 1).first();
+                        livesLabel.p.label = "Lives x " + Q.state.get("lives");
+                    }
+                }
+            }
+        });
+       
+        //enemy
+        Q.Sprite.extend("Fly", {
+                init: function(p){
+                this._super(p, {vy: -100, rangeY: 200, gravity: 0, sprite:"fly", sheet:"fly", scale: 0.5});
+                this.add("2d, aiBounce, animation");
+                this.p.initialY = this.p.y;
+                
+                this.on("bump.left,bump.right", function(collision){
+                    if (collision.obj.isA("Player")){
+                        if (collision.obj.p.superMode>0){
+                            console.log("superhit" + collision.obj.p.superMode);
+                            this.destroy();
+                        } else {
+                            collision.obj.damage();
+                        }
+                        
+                    }
+                });
+                this.on("bump.bottom", function(collision){
+                    this.p.vy = collision.impact;
+                    if(collision.obj.isA("Player")){
+                        if (collision.obj.p.superMode>0){
+                            console.log("superhit");
+                            this.destroy();
+                        } else {
+                            collision.obj.damage();
+                        }
+                        collision.obj.p.vy *= -1;
+                    }
+
+                });
+                this.on("bump.top", function(collision){
+                    this.p.vy = collision.impact;
+                    if(collision.obj.isA("Player")){
+                        collision.obj.p.vy=-100;
+                        this.destroy();
+                    }
+                });
+            },
+            step:function(dt){
+                this.play("move");
+                if(this.p.y - this.p.initialY >= this.p.rangeY && this.p.vy > 0){
+                    this.p.vy = -this.p.vy;
+                }
+                else if(-this.p.y + this.p.initialY >= this.p.rangeY && this.p.vy < 0){
+                    this.p.vy = -this.p.vy;
+                }
+            }
+        });
+        Q.Sprite.extend("Slime", {
+            init: function(p){
+                this._super(p, {vx: 100, defaultDirection: "right", sprite:"slime", sheet:"slime"});
+                this.p.type |= Q.SPRITE_ENEMY;
+                this.add("2d, aiBounce, commonEnemy, animation");
+                this.on("bump.left, bump.right, bump.botttom", function(collision){
+                    if (collision.obj.isA("Player")){
+                        if (collision.obj.p.superMode>0){
+                            this.destroy();
+                        } else {
+                            collision.obj.damage();
+                        }
+                        
+                    }
+                });
+                this.on("bump.top", function(collision){
+                    if (collision.obj.isA("Player")){
+                        collision.obj.p.vy=-100;
+                        this.destroy();
+                    }
+                });
+
+            },
+            
+            step: function(dt){
+                var dirX = this.p.vx/Math.abs(this.p.vx);
+                var ground = Q.stage().locate(this.p.x, this.p.y + this.p.h/2 + 1, Q.SPRITE_DEFAULT);
+                var nextTile = Q.stage().locate(this.p.x + dirX * this.p.w/2 + dirX, this.p.y + this.p.h/2 + 1, Q.SPRITE_DEFAULT);
+                this.play("move");
+                if (!nextTile && ground){
+                    if (this.p.vx > 0){
+                        if (this.p.defaultDirection == "right"){
+                            this.flip = false;
+                        }
+                        else {
+                            this.p.flip = "x";
+                        }
+                    }
+                    else {
+                        if (this.p.defaultDirection == "left"){
+                            this.p.flip = false;
+                        }
+                        else {
+                            this.p.flip = "x";
+                        }
+                    }
+                    this.p.vx = -this.p.vx;
+                }
+            }
+        });
+        Q.Sprite.extend("SlimeBoss", {
+            init: function(p){
+                this._super(p, {vx: 200, defaultDirection: "right", sheet:"king", sprite:"king", hp: 8, timeInvincible: 0, scale: 1.0});
+                this.p.type |= Q.SPRITE_ENEMY;
+                this.add("2d, aiBounce, commonEnemy, animation");
+                this.on("bump.left, bump.right, bump.botttom", function(collision){
+                    if (collision.obj.isA("Player")){
+                        if (collision.obj.p.superMode>0){
+                            this.damage();
+                        } else {
+                            collision.obj.damage();
+                        }
+                        
+                    }
+                });
+                this.on("bump.top", function(collision){
+                    if (collision.obj.isA("Player")){
+                        collision.obj.p.vy=-100;
+                        this.damage();
+                    }
+                });
+
+            },
+            damage: function(){
+                if(!this.p.timeInvincible){
+                    this.p.hp--;
+                    this.p.scale = this.p.hp/8;
+                    this.p.timeInvincible = 1;
+                    
+                    if(this.p.hp<=0){
+                        this.destroy();
+                        var block = Q("HorizontalBlock").first();
+                        block.destroy();
+                        Q.stage(0).insert(new Q.WinZone({x: 29*70+35, y:15*70+35}));      
+
+                    }
+                }
+            },
+            step: function(dt){
+                this.play("move");
+                var dirX = this.p.vx/Math.abs(this.p.vx);
+                var ground = Q.stage().locate(this.p.x, this.p.y + this.p.h/2 + 1, Q.SPRITE_DEFAULT);
+                var nextTile = Q.stage().locate(this.p.x + dirX * this.p.w/2 + dirX, this.p.y + this.p.h/2 + 1, Q.SPRITE_DEFAULT);
+                //this.play("move");
+                if (this.p.timeInvincible>0){
+                    this.p.sprite = "king_flash";
+                    this.p.timeInvincible = Math.max(this.p.timeInvincible - dt, 0);
+                }
+                if (this.p.timeInvincible==0){
+                    this.p.sprite = "king";
+                }   
+                
+            }
+        });
+        Q.Sprite.extend("JumpingEnemy", {
+            init: function(p){
+                this._super(p, {vy: -100, jumpSpeed: 200, gravity: 0});
+                this.add("2d, aiBounce");
+                this.p.initialY = this.p.y;
+                
+                this.on("bump.left,bump.right", function(collision){
+                    if(collision.obj.isA("Player")){
+                        collision.obj.damage();
+
+                    }
+                });
+                this.on("bump.bottom", function(collision){
+                    this.p.vy = collision.impact;
+                    if(collision.obj.isA("Player")){
+                        collision.obj.damage();
+                        collision.obj.p.vy *= -1;
+                    }
+
+                });
+                this.on("bump.top", function(collision){
+                    this.p.vy = collision.impact;
+                    if(collision.obj.isA("Player")){
+                        collision.obj.p.vy=-100;
+                        this.destroy();
+                    }
+                });
+            },
+            step:function(dt){
+                if(this.p.y - this.p.initialY >= this.p.rangeY && this.p.vy > 0){
+                    this.p.vy = -this.p.vy;
+                }
+                else if(-this.p.y + this.p.initialY >= this.p.rangeY && this.p.vy < 0){
+                    this.p.vy = -this.p.vy;
+                }
+            }
+        });
+        Q.Sprite.extend("Slime2", {
+            init: function(p){
+                this._super(p, {
+                    sprite: "slime",
+                    sheet: "slime"
+                });
+                this.add("2d, aiBounce, commonEnemy, animation");
+                this.on("bump.left, bump.right, bump.botttom", function(collision){
+                    if (collision.obj.isA("Player")){
+                        collision.obj.damage();
+                    }
+                });
+                this.on("bump.top", function(collision){
+                    if (collision.obj.isA("Player")){
+                        collision.obj.p.vy=-100;
+                        this.destroy();
+                    }
+                });
+            },
+            step: function(dt){
+                var dirX = this.p.vx/Math.abs(this.p.vx);
+                var ground = Q.stage().locate(this.p.x, this.p.y + this.p.h/2 + 1, Q.SPRITE_DEFAULT);
+                var nextTile = Q.stage().locate(this.p.x + dirX * this.p.w/2 + dirX, this.p.y + this.p.h/2 + 1, Q.SPRITE_DEFAULT);
+                this.play("move");
+                if (!nextTile && ground){
+                    if (this.p.vx > 0){
+                        if (this.p.defaultDirection == "right"){
+                            this.flip = false;
+                        }
+                        else {
+                            this.p.flip = "x";
+                        }
+                    }
+                    else {
+                        if (this.p.defaultDirection == "left"){
+                            this.p.flip = false;
+                        }
+                        else {
+                            this.p.flip = "x";
+                        }
+                    }
+                    this.p.vx = -this.p.vx;
+                }
+            }       
+        });
+        Q.Sprite.extend("CoinBlock",{
+            init: function(p){
+                this._super(p, {sheet:"tiles", frame: 14, gravity:0, loot:1});
+                this.add("2d");
+                
+                this.on("bump.bottom", function(collision){
+                    if (collision.obj.isA("Player")){
+                        if (this.p.loot == 1 ){     
+                                this.p.frame = 4;                       
+                                var coin = Q.stage(0).insert(new Q.Coin({x: this.p.x, y: this.p.y-70}));
+                                coin.destroy();
+                                Q.state.inc("coins", 1);
+                                var coinsLabel = Q("UI.Text", 1).items[1];
+                                coinsLabel.p.label = 'Coins x ' + Q.state.get("coins");
+                                this.p.loot = 0;                            
+                        } 
+                    }
+                });
+            }           
+        });
+        Q.Sprite.extend("InvisCoinBlock",{
+            init: function(p){
+                this._super(p, {sheet:"tiles", frame: 10, gravity:0, loot:1});
+                this.add("2d");
+                
+                this.on("bump.bottom", function(collision){
+                    if (collision.obj.isA("Player")){
+                        if (this.p.loot == 1 ){     
+                                this.p.frame = 4;                       
+                                var coin = Q.stage(0).insert(new Q.Coin({x: this.p.x, y: this.p.y-70}));
+                                coin.destroy();
+                                Q.state.inc("coins", 1);
+                                var coinsLabel = Q("UI.Text", 1).items[1];
+                                coinsLabel.p.label = 'Coins x ' + Q.state.get("coins");
+                                this.p.loot = 0;                            
+                        } 
+                    }
+                });
+            }   
+        });
+        Q.Sprite.extend("StarBlock",{
+            init: function(p){
+                this._super(p, {sheet:"tiles", frame: 14, gravity:0, loot:1});
+                this.add("2d");
+                
+                this.on("bump.bottom", function(collision){
+                    if (collision.obj.isA("Player")){
+                        if (this.p.loot == 1 ){ 
+
+                                this.p.frame = 4;
+                                Q.stage(0).insert(new Q.Star({x: this.p.x, y: this.p.y-70}));
+                                // var enemy = stage.insert(new Q.VerticalEnemy({x:800, y:120, rangeY:70, asset: "player.png"}));
+                                this.p.loot = 0;                            
+                        } 
+                    }
+                });
+            }
+        });
+        Q.Sprite.extend("VerticalBlock", {
+                init: function(p){
+                this._super(p, {vy: -100, rangeY: 200, gravity: 0, sheet:"tiles", frame: 4});
+                this.add("2d, aiBounce");
+                this.p.initialY = this.p.y;
+                
+                
+                this.on("bump.bottom", function(collision){
+                    this.p.vy = collision.impact;                    
+
+                });
+                this.on("bump.top", function(collision){
+                    this.p.vy = collision.impact;
+                    
+                });
+            },
+            step:function(dt){
+                if(this.p.y - this.p.initialY >= this.p.rangeY && this.p.vy > 0){
+                    this.p.vy = -this.p.vy;
+                }
+                else if(-this.p.y + this.p.initialY >= this.p.rangeY && this.p.vy < 0){
+                    this.p.vy = -this.p.vy;
+                }
+            }
+        });
+        Q.Sprite.extend("HorizontalBlock", {
+            init: function(p){
+                this._super(p, {sheet:"tiles", frame:4, gravity:0, initialX:0, initialVX: 0});
+                this.add("2d, aiBounce");
+                this.p.initialX = this.p.x;
+                
+
+            },
+            
+            step: function(dt){
+               if(this.p.x - this.p.initialX >= this.p.rangeX && this.p.vx > 0){
+                    this.p.vx = -this.p.vx;
+                }
+                else if(-this.p.x + this.p.initialX >= this.p.rangeX && this.p.vx < 0){
+                    this.p.vx = -this.p.vx;
+                }
+            }
+        });
+        Q.Sprite.extend("WaterBlock", {
+           init: function(p){
+                this._super(p, {sheet:"tiles", frame:16, opacity:0.4, gravity:0});
+                this.add("2d");
+                this.p.type = Q.SPRITE_PARTICLE;
+                
+            }, 
+            
+        });
+        Q.Sprite.extend("ShakyBlock", {
+           init: function(p){
+                this._super(p, {sheet:"tiles", frame:16, opacity:0.93, gravity:0});
+                this.add("2d");
+                this.on("bump.top", function(collision){
+                    if (collision.obj.isA("Player")){
+                        this.p.gravity = 1;
+                    }
+                });
+            },  
+        })
+        Q.Sprite.extend("Coin", {
+            init: function(p) {
+                this._super(p, {asset: "coin.png", scale:0.50});
+            }
+        });
+        Q.Sprite.extend("Heart", {
+            init: function(p){
+                this._super(p, {asset: "heart.png", scale:0.50});
+            }
+        });
+        Q.Sprite.extend("Star",{
+            init: function(p){
+                this._super(p, {asset: "star.png", scale: 0.50, vx: 70 });
+                this.add("2d, aiBounce");
+            }
+        });
+        Q.Sprite.extend("DeathBlock", {
+            init:function(p){
+                this._super(p, {asset: "blank.png"});
+            }
+        });
+        Q.Sprite.extend("Exit", {
+            init: function(p){
+                this._super(p, {asset: "exit.png"});
+            }
+        });
+        Q.Sprite.extend("WinZone", {
+            init: function(p){
+                this._super(p, {asset: "exit.png"});
+            }
+        });
+        Q.Sprite.extend("Trap", {
+            init: function(p){
+                this._super(p, {asset: "blank.png", trapX:0, trapY:0});
+                this.on("hit",this,"collision");
+            },
+            collision: function(p){
+                Q.stage(0).insert(new Q.HorizontalBlock({x:this.p.x-(5*70), y:this.p.y, vx:0}))
+                 // var enemy = stage.insert(new Q.VerticalEnemy({x:800, y:120, rangeY:70, asset: "player.png"}));
+                Q.stage(0).insert(new Q.WaterBlock({x:this.p.trapX, y:this.p.trapY}));
+                Q.stage(0).insert(new Q.WaterBlock({x:this.p.trapX-(1*70), y:this.p.trapY}));
+                Q.stage(0).insert(new Q.WaterBlock({x:this.p.trapX-(2*70), y:this.p.trapY}));
+                Q.stage(0).insert(new Q.WaterBlock({x:this.p.trapX-(3*70), y:this.p.trapY}));
+                Q.stage(0).insert(new Q.WaterBlock({x:this.p.trapX-(4*70), y:this.p.trapY}));
+                Q.stage(0).insert(new Q.WaterBlock({x:this.p.trapX-(5*70), y:this.p.trapY}));
+                 this.destroy();
+
+            }
+        });
+        Q.Sprite.extend("JumpPotion",{
+            init:function(p){
+                this._super(p, {asset: "jump.png", scale:0.70, vx:70})
+                this.add("2d, aiBounce");
+            }
+        });
+        Q.scene("gameStats", function(stage){
+            var statsContainer = stage.insert(new Q.UI.Container({
+                fill: "gray", 
+                x: 960/2, 
+                y: 620,
+                border: 1, 
+                shadow: 3,
+                shadowColor: "rgba(0,0,0,0.4)",
+                w: 960, 
+                h: 40                
+            }));
+            var lives = stage.insert(new Q.UI.Text({
+                label: "Lives x " + Q.state.get("lives"),
+                color: "white", 
+                x: -300,
+                y: 0
+            }), statsContainer);
+            var coins = stage.insert(new Q.UI.Text({
+                label: "Coins x " + Q.state.get("coins"),
+                color: "white",
+                x: 300, 
+                y: 0
+            }), statsContainer);
+            var coins = stage.insert(new Q.UI.Text({
+                label: "Stage " + Q.state.get("currStage"),
+                color: "white",
+                x: 0,
+                y: 0
+            }), statsContainer);
+        });
+        Q.scene("StartScreen", function(stage){    
+
+            var background = stage.insert(new Q.Repeater({ asset: "homeBg.png",
+                                  speedX: 75,      // Parralax effect
+                                  speedY: 75,      // Parralax effect
+                                  scale: 1.00}));            
+            var startButton = stage.insert(new Q.UI.Button({ x: Q.width/2, y: Q.height/2, fill: "#CCCCCC",
+                                                          label: "        Start        " }));  
+            var selectStageButton = stage.insert(new Q.UI.Button({ x: Q.width/2, y: Q.height/2+100, fill: "#CCCCCC",
+                                                          label: "  Select Stage  " }));  
+            startButton.on("click", function(){
+                Q.clearStages();
+                Q.state.set({lives:3,coins:0, currStage:1, nextStage:2});
+                Q.stageScene("level1", 0);
+                Q.stageScene("gameStats", 1);    
+
+
+            });
+            selectStageButton.on("click", function(){
+                Q.clearStages();
+                Q.stageScene("SelectStage", 0);
+            });
+        });
+        
+        Q.scene("SelectStage", function(stage){
+            var background = stage.insert(new Q.Repeater({ asset: "nightsky.png",
+                                  speedX: 75,      // Parralax effect
+                                  speedY: 75,      // Parralax effect
+                                  scale: 1.00}));      
+            var label = stage.insert(new Q.UI.Text({x:Q.width/2, y: 75, label: "Select Stage", size: 48, color:"white"}));
+            var menuButton = stage.insert(new Q.UI.Button({ x: Q.width-100, y: 50, fill: "#CCCCCC",
+                                      label: "Menu" }));
+            menuButton.on("click", function(){
+                Q.clearStages();
+                
+                Q.stageScene("StartScreen", 0);  
+            });
+            var button1 = stage.insert(new Q.UI.Button({ x: Q.width/2, y: Q.height/2-150, fill: "#CCCCCC",
+                                      label: "      Stage 1      " }));   
+            var button2 = stage.insert(new Q.UI.Button({ x: Q.width/2, y: Q.height/2-75, fill: "#CCCCCC",
+                                      label: "      Stage 2      " }));  
+            var button3 = stage.insert(new Q.UI.Button({ x: Q.width/2, y: Q.height/2, fill: "#CCCCCC",
+                                      label: "      Stage 3      " }));  
+            var button4 = stage.insert(new Q.UI.Button({ x: Q.width/2, y: Q.height/2+75, fill: "#CCCCCC",
+                                      label: "      Stage 4      " }));  
+            var button5 = stage.insert(new Q.UI.Button({ x: Q.width/2, y: Q.height/2+150, fill: "#CCCCCC",
+                                      label: "      Stage 5      " }));  
+            /*
+            var buttons = [];
+            var startingY = 100;
+            for(var i = 1; i <= 5; i++){
+                buttons[i] = stage.insert(new Q.UI.Button({ x: Q.width/2, y: startingY+(75*i), fill: "#CCCCCC", label: "      Stage "+i+"      " })); 
+                 
+
+            }*/
+            button1.on("click", function(){
+                Q.clearStages();
+                Q.state.set({lives:3,coins:0, currStage:1, nextStage:2});
+                Q.stageScene("level1", 0);
+                Q.stageScene("gameStats", 1);  
+            });
+            button2.on("click", function(){
+                Q.clearStages();
+                Q.state.set({lives:3,coins:0, currStage:2, nextStage:3});
+                Q.stageScene("level2", 0);
+                Q.stageScene("gameStats", 1); 
+            });
+            button3.on("click", function(){
+                Q.clearStages();
+                Q.state.set({lives:3,coins:0, currStage:3, nextStage:4});
+                Q.stageScene("level3", 0);
+                Q.stageScene("gameStats", 1); 
+            });
+            button4.on("click", function(){
+                Q.clearStages();
+                Q.state.set({lives:3,coins:0, currStage:4, nextStage:5});
+                Q.stageScene("level4", 0);
+                Q.stageScene("gameStats", 1); 
+            });
+            button5.on("click", function(){
+                Q.clearStages();
+                Q.state.set({lives:3,coins:0, currStage:5, nextStage:6});
+                Q.stageScene("level5", 0);
+                Q.stageScene("gameStats", 1); 
+            });
+
+        });
+        Q.scene("level1",function(stage) {
+            
+            var background = new Q.TileLayer({ dataAsset: 'level1.tmx', layerIndex: 0, sheet: 'tiles', tileW: 70, tileH: 70, type: Q.SPRITE_NONE });
+            stage.insert(background);
+            Q.stageWidth = background.p.w;
+            Q.stageHeight = background.p.h;
+            stage.collisionLayer(new Q.TileLayer({ dataAsset: 'level1.tmx', layerIndex:1,  sheet: 'tiles', tileW: 70, tileH: 70 }));
+          
+            var player = stage.insert(new Q.Player());
+            
+            stage.add("viewport").follow(player,{x: true, y: true},{minX: 0, maxX: background.p.w, minY: 0, maxY: background.p.h});
+            
+            //sample 
+           // var enemy = stage.insert(new Q.VerticalEnemy({x:800, y:120, rangeY:70, asset: "player.png"}));
+           // var walkEnemy = stage.insert(new Q.GroundEnemy({x:400, y:120, asset:"player.png"}));
+            var levelAssets = [
+                ["Slime", {x: 18*70, y: 11*70, scale:0.8}], 
+                ["Slime", {x: 8*70+35, y: 11*70+35, scale:0.8}],
+                ["Slime", {x: 16*70+35, y: 6*70+35, scale:0.8, vx: 170}], 
+                ["Slime", {x: 30*70, y: 5*70+35, scale:0.8}], 
+                ["Fly", {x: 11*70+35, y: 5*70+35, rangeY: 70, vy: 150}],
+                ["Fly", {x: 15*70+35, y: 5*70+35, rangeY: 70, vy: 160}],
+                ["Fly", {x: 18*70+35, y: 5*70+35, rangeY: 70, vy: 175}],
+                ["Fly", {x: 33*70+35, y: 7*70+35, rangeY: 70, vy: 510, sprite:"redFly"}],
+                ["Fly", {x: 31*70+35, y: 4*70+35, rangeY: 70, vy: 510, sprite:"redFly"}],
+                ["StarBlock", {x:2*70+35, y: 6*70+35}],
+                ["Coin", {x: 9*70, y: 8*70}],
+                ["Coin", {x: 1*70+35, y:11*70+35}],
+                ["Coin", {x: 2*70+35, y:11*70+35}],
+                ["Coin", {x: 2*70+35, y:12*70+35}],
+                ["Coin", {x: 3*70+35, y:11*70+35}],
+                ["Coin", {x: 3*70+35, y:12*70+35}],
+                ["Coin", {x: 31*70+35, y: 11*70+35}],
+                ["Coin", {x: 33*70+35, y: 5}],
+                ["Coin", {x: 37*70+35, y: 6*70+35}],
+                ["Heart", {x:1*70+35, y: 12*70+35}],
+                ["Exit", {x: 38*70+35, y: 11*70+35}]
+            ];
+            stage.loadAssets(levelAssets);
+            
+        });
+        //level2
+        Q.scene("level2", function(stage){
+            var background = new Q.TileLayer({ dataAsset: 'level2.tmx', layerIndex: 0, sheet: 'tiles', tileW: 70, tileH: 70, type: Q.SPRITE_NONE });
+            stage.insert(background);
+            Q.stageWidth = background.p.w;
+            Q.stageHeight = background.p.h;
+            stage.collisionLayer(new Q.TileLayer({ dataAsset: 'level2.tmx', layerIndex:1,  sheet: 'tiles', tileW: 70, tileH: 70 }));
+            var player = stage.insert(new Q.Player());
+            stage.add("viewport").follow(player,{x: true, y: true},{minX: 0, maxX: background.p.w, minY: 0, maxY: background.p.h});
+            var levelAssets = [
+                ["Slime", {x: 18*70+35, y: 6*70+35}],   
+                ["Slime", {x: 34*70+35, y: 16*70+35}],
+                ["Slime", {x: 36*70+35, y: 16*70+35}],
+                ["Fly", {x: 11*70+35, y: 14*70+35, rangeY: 70, vy: 480, sprite:"redFly"}],
+                ["Fly", {x: 37*70+35, y: 10*70+35, rangeY: 70, vy: 160}],
+                ["Fly", {x: 61*70+35, y: 16*70+35, rangeY: 70, vy: 160}],
+                ["Fly", {x: 80*70+35, y: 14*70+35, rangeY: 140, vy: 490, sprite:"redFly"}],
+                ["Fly", {x: 82*70+35, y: 14*70+35, rangeY: 145, vy: 500, sprite:"redFly"}],
+                ["Fly", {x: 84*70+35, y: 14*70+35, rangeY: 140, vy: 510, sprite:"redFly"}],
+                ["Fly", {x: 87*70+35, y: 14*70+35, rangeY: 140, vy: 480, sprite:"redFly"}],
+                ["Fly", {x: 50*70+35, y: 7*70+35, rangeY: 70, vy: 160}],
+                ["Fly", {x: 62*70+35, y: 7*70+35, rangeY: 70, vy: 160}],
+                ["CoinBlock", {x:6*70+35, y: 12*70+35}],              
+                ["CoinBlock", {x:25*70+35, y: 14*70+35}],
+                ["InvisCoinBlock", {x:16*70+35, y: 13*70+35}],
+                ["VerticalBlock", {x:98*70+35, y:10*70+35}],
+                ["HorizontalBlock", {x:56*70+35, y:9*70+35, vx: 200, rangeX: 20*70/2}],
+                ["Coin", {x:69*70+35, y:18*70+35}],
+                ["Coin", {x:70*70+35, y:18*70+35}],
+                ["Coin", {x:56*70+35, y:16*70+35}],
+                ["Coin", {x:58*70+35, y:16*70+35}],
+                ["Coin", {x:87*70+35, y:4*70+35}],
+                ["Coin", {x:88*70+35, y:4*70+35}],
+                ["Coin", {x:89*70+35, y:4*70+35}],
+                ["Coin", {x:90*70+35, y:4*70+35}],
+                ["Coin", {x:87*70+35, y:5*70+35}],
+                ["Coin", {x:88*70+35, y:5*70+35}],
+                ["Coin", {x:89*70+35, y:5*70+35}],
+                ["Coin", {x:90*70+35, y:5*70+35}],
+                ["Coin", {x:87*70+35, y:6*70+35}],
+                ["Coin", {x:88*70+35, y:6*70+35}],
+                ["Coin", {x:89*70+35, y:6*70+35}],
+                ["Coin", {x:90*70+35, y:6*70+35}],
+                ["Exit", {x: 99*70+35, y: 18*70+35}]
+
+            ];
+            stage.loadAssets(levelAssets);
+        });
+        Q.scene("level3", function(stage){
+            var background = new Q.TileLayer({ dataAsset: 'level3.tmx', layerIndex: 0, sheet: 'tiles', tileW: 70, tileH: 70, type: Q.SPRITE_NONE });
+            
+            stage.insert(background);
+            Q.stageWidth = background.p.w;
+            Q.stageHeight = background.p.h;
+            
+            stage.collisionLayer(new Q.TileLayer({ dataAsset: 'level3.tmx', layerIndex:1,  sheet: 'tiles', tileW: 70, tileH: 70 }));
+            var player = stage.insert(new Q.Player());
+            stage.add("viewport").follow(player,{x: true, y: true},{minX: 0, maxX: background.p.w, minY: 0, maxY: background.p.h});
+            
+            var levelAssets = [               
+                ["Slime", {x: 40*70, y:10*70}],
+                ["Slime", {x: 26*70+35, y:16*70+35}],
+                ["Slime", {x: 32*70+35, y:18*70+35, vx:-200}],
+                ["Slime", {x: 41*70+35, y:18*70+35, vx:200}],
+                ["Fly", {x: 35*70+35, y:12*70+35, rangeY:70, vy:480, sprite:"redFly"}],
+                ["Fly", {x: 41*70+35, y:12*70+35, rangeY:70, vy:480, sprite:"redFly"}],
+                ["Trap", {x:27*70+35, y:18*70+35, trapX:28*70+35, trapY:18*70+35}],
+                ["WaterBlock", {x: 53*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 54*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 55*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 56*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 57*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 58*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 59*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 60*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 61*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 62*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 63*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 64*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 65*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 66*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 67*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 68*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 69*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 70*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 71*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 72*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 73*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 74*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 75*70+35, y:18*70+35}],
+                ["WaterBlock", {x: 53*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 54*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 55*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 56*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 57*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 58*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 59*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 60*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 61*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 62*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 63*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 64*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 65*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 66*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 67*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 68*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 69*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 70*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 71*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 72*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 73*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 74*70+35, y:17*70+35}],
+                ["WaterBlock", {x: 75*70+35, y:17*70+35}],
+                ["HorizontalBlock", {x: 58*70+35, y: 16*70+35, rangeX: 4*70, vx: -200}],
+                ["HorizontalBlock", {x: 63*70+35, y: 15*70+35, rangeX: 2*70, vx: 200}],
+                ["HorizontalBlock", {x: 66*70+35, y: 14*70+35, rangeX: 3*70, vx: 200}],
+                ["HorizontalBlock", {x: 70*70+35, y: 16*70+35, rangeX: 4*70, vx: -200}],
+                ["StarBlock", {x:64*70+35, y:16*70+35, frame:0}],
+                ["Coin", {x:3*70+35, y:15*70+35}],
+                ["Coin", {x:20*70+35, y:15*70+35}],
+                ["Coin", {x:21*70+35, y:15*70+35}],
+                ["Coin", {x:33*70+35, y:13*70+35}],
+                ["Coin", {x:39*70+35, y:13*70+35}],
+                ["Coin", {x:33*70+35, y:14*70+35}],
+                ["Coin", {x:39*70+35, y:14*70+35}],
+                ["Coin", {x:74*70+35, y:15*70+35}],
+                ["Coin", {x:68*70+35, y:15*70+35}],
+                ["Exit", {x: 99*70+35, y: 18*70+35}]
+            ];
+            stage.loadAssets(levelAssets);
+        });
+        Q.scene("level4", function(stage){
+            var background = new Q.TileLayer({ dataAsset: 'level4.tmx', layerIndex: 0, sheet: 'tiles', tileW: 70, tileH: 70, type: Q.SPRITE_NONE });
+            
+            stage.insert(background);
+            Q.stageWidth = background.p.w;
+            Q.stageHeight = background.p.h;
+            
+            stage.collisionLayer(new Q.TileLayer({ dataAsset: 'level4.tmx', layerIndex:1,  sheet: 'tiles', tileW: 70, tileH: 70 }));
+            var player = stage.insert(new Q.Player({x:1*70+35, y:15*70+35}));
+            stage.add("viewport").follow(player,{x: true, y: true},{minX: 0, maxX: background.p.w, minY: 0, maxY: background.p.h});
+            var levelAssets = [
+                ["Slime", {x: 18*70, y: 11*70, scale:0.8}],
+                ["Slime", {x: 30*70, y: 17*70, vx: 1500, scale:0.8}],
+                ["Slime", {x: 46*70, y: 17*70+35, vx:1500, scale:0.8}], 
+                ["StarBlock", {x: 58*70+35, y: 13*70+35, frame: 0}],
+                ["ShakyBlock", {x: 23*70+35, y: 17*70+35, frame: 17}],
+                ["ShakyBlock", {x: 54*70+35, y: 18*70+35, frame: 11}],
+                ["ShakyBlock", {x: 55*70+35, y: 18*70+35, frame: 11}],
+                ["HorizontalBlock", {x:91*70+35, y:16*70+35, rangeX:3*70, vx:200}],
+                ["StarBlock", {x:10*70+35, y:15*70+35}],
+                ["Heart", {x: 1*70+35, y: 7*70+35}], 
+                ["Coin", {x: 2*70+35, y: 7*70+35}],
+                ["Coin", {x: 3*70+35, y: 7*70+35}], 
+                ["Coin", {x: 4*70+35, y: 7*70+35}], 
+                ["Coin", {x: 1*70+35, y: 6*70+35}], 
+                ["Coin", {x: 2*70+35, y: 6*70+35}], 
+                ["Coin", {x: 3*70+35, y: 6*70+35}], 
+                ["Coin", {x: 4*70+35, y: 6*70+35}], 
+                ["Coin", {x: 1*70+35, y: 5*70+35}], 
+                ["Coin", {x: 2*70+35, y: 5*70+35}], 
+                ["Coin", {x: 3*70+35, y: 5*70+35}],  
+                ["Coin", {x: 4*70+35, y: 5*70+35}], 
+                ["Coin", {x: 1*70+35, y: 4*70+35}], 
+                ["Coin", {x: 2*70+35, y: 4*70+35}], 
+                ["Coin", {x: 3*70+35, y: 4*70+35}],  
+                ["Coin", {x: 4*70+35, y: 4*70+35}], 
+                ["Coin", {x: 59*70+35, y: 13*70+35}],  
+                ["Coin", {x: 60*70+35, y: 13*70+35}],
+                ["Coin", {x: 59*70+35, y: 14*70+35}],  
+                ["Coin", {x: 60*70+35, y: 14*70+35}],
+                ["Exit", {x: 99*70+35, y: 15*70+35}]
+
+                
+            ];
+            stage.loadAssets(levelAssets);
+        });
+        Q.scene("level5", function(stage){
+            var background = new Q.TileLayer({ dataAsset: 'level5.tmx', layerIndex: 0, sheet: 'tiles', tileW: 70, tileH: 70, type: Q.SPRITE_NONE });
+            
+            stage.insert(background);
+            Q.stageWidth = background.p.w;
+            Q.stageHeight = background.p.h;
+            
+            stage.collisionLayer(new Q.TileLayer({ dataAsset: 'level5.tmx', layerIndex:1,  sheet: 'tiles', tileW: 70, tileH: 70 }));
+            var player = stage.insert(new Q.Player({x:1*70+35, y:15*70+35}));
+            stage.add("viewport").follow(player,{x: true, y: true},{minX: 0, maxX: background.p.w, minY: 0, maxY: background.p.h});
+            var levelAssets = [
+                ["SlimeBoss", {x: 22*70+35, y: 8*70+35}],
+                ["JumpPotion", {x: 5*70+35, y:10*70+35}],
+                ["HorizontalBlock", {x: 29*70+35, y:15*70+35, vx:0}]
+            ];
+            stage.loadAssets(levelAssets);
+
+        });
+        Q.scene("endGame", function(stage){
+            var container = stage.insert(new Q.UI.Container({
+                    x: Q.width/2, y: Q.height/2, fill: "rgba(0,0,0,0.5)"
+            }));
+             
+            var button = container.insert(new Q.UI.Button({ x: 0, y: 0, fill: "#CCCCCC",
+                                                          label: "Back to Menu" }))        
+            var label = container.insert(new Q.UI.Text({x:0, y: -10 - button.p.h,
+                                                           label: stage.options.label }));
+
+            button.on("click",function() {
+                Q.clearStages();
+                Q.stageScene('StartScreen', 0);
+
+            });
+
+            container.fit(20);
+        });
+        Q.scene("Ending", function(stage){
+            var background = stage.insert(new Q.Repeater({ asset: "ending.png",
+                                  speedX: 75,      // Parralax effect
+                                  speedY: 75,      // Parralax effect
+                                  scale: 1.00}));      
+            var label = stage.insert(new Q.UI.Text({x:Q.width/2, y: Q.height/2, size: 48, color:"white",
+                                                           label: "Congratulation!!!"}));
+            var menuButton = stage.insert(new Q.UI.Button({ x: Q.width-100, y: 50, fill: "#CCCCCC",
+                                      label: "Menu" }));
+            menuButton.on("click", function(){
+                Q.clearStages();
+                
+                Q.stageScene("StartScreen", 0);  
+            });
+        });
+        Q.scene("pauseGame", function(stage){
+            if (Q.stage(0) != null){
+                Q.stage(0).pause();
+            }
+            var container = stage.insert(new Q.UI.Container({
+                    x: Q.width/2, y: Q.height/2, fill: "rgba(0,0,0,0.5)"
+            }));
+             
+            var button1 = container.insert(new Q.UI.Button({ x: 0, y: 0, fill: "#CCCCCC",
+                                                          label: "Resume" }));        
+            var button2 = container.insert(new Q.UI.Button({ x: 0, y: button1.p.h+10, fill: "#CCCCCC",
+                                                          label: "  Menu  " })); 
+            var label = container.insert(new Q.UI.Text({x:0, y: -10 - button1.p.h,
+                                                           label: stage.options.label }));
+            var god = stage.insert(new Q.God());
+            stage.add("viewport").follow(god,{x: true, y: true},{minX: 0, minY: 0});
+            button1.on("click",function() {                               
+                Q.stage(0).unpause();
+                Q.clearStage(2);        //resume game
+            });
+            button2.on("click",function() {                               
+                
+                Q.clearStages();        //resume game
+                Q.stageScene("StartScreen", 0);
+            });
+            container.fit(20);           
+            
+        });
+        //load assets
+        Q.load("homeBg.png, nightsky.png, tiles_map.png, player.png, exit.png, coin.png, heart.png, avatarFrame.png, superFrame.png, flyFrame.png, slimeFrame.png, kingFrame.png, fly.png, slimeKing.png, star.png, level1.tmx, level2.tmx, level3.tmx, level4.tmx, level5.tmx, blank.png, jump.png", function() { //insert every image to it
+              Q.sheet("tiles","tiles_map.png", { tilew: 70, tileh: 70});   
+              Q.sheet("avatar", "avatarFrame.png",{
+                tilew: 70,  
+                tileh: 70, 
+                sx: 0,    
+                sy: 0 
+              } );  
+              Q.sheet("superAvatar", "superFrame.png",{
+                tilew: 70,  
+                tileh: 70, 
+                sx: 0,    
+                sy: 0 
+              });
+              Q.sheet("slime", "slimeFrame.png",{
+                tilew: 70,  
+                tileh: 70, 
+                sx: 0,    
+                sy: 0     
+              });    
+              Q.sheet("fly", "flyFrame.png",{
+                tilew: 70,  
+                tileh: 70, 
+                sx: 0,    
+                sy: 0    
+               });
+              Q.sheet("king", "kingFrame.png",{
+                tilew: 530,  
+                tileh: 530, 
+                sx: 0,    
+                sy: 0                 
+              });
+          Q.animations("avatar", {
+            move: { frames: [1, 2, 3, 4, 5], next:'no_stroke', rate: 1/3.5},
+            
+            jump: { frames: [12, 13, 14], next:'no_stroke', rate:1/3},
+            fall: { frames: [15, 15, 16], next:'no_stroke', rate:1/5},
+            no_stroke: { frames: [11]}
+          });
+          Q.animations("avatar_flash", {
+            move: { frames: [1, 0, 2, 0, 3, 0, 4, 0, 5], next:'no_stroke', rate: 1/7},
+            
+            jump: { frames: [12, 0, 13, 0, 14], next:'no_stroke', rate:1/6},
+            fall: { frames: [15, 0, 15, 0, 16], next:'no_stroke', rate:1/10},
+            no_stroke: { frames: [11, 0], rate: 1/4}
+          });
+          Q.animations("superAvatar", {
+            move: { frames: [1, 2, 3, 4, 5], next:'no_stroke', rate: 1/3.5},
+            flash: { frames: [11, 0], rate: 1/4},
+            jump: { frames: [12, 13, 14], next:'no_stroke', rate:1/3},
+            fall: { frames: [15, 15, 16], next:'no_stroke', rate:1/5},
+            no_stroke: { frames: [11]}
+          });
+          Q.animations("slime", {
+            move: { frames: [0, 1], rate: 1/3.5}
+            
+          });    
+          Q.animations("fly", {
+            move: { frames: [1, 2], rate: 1/4},
+            
+          });
+          Q.animations("redFly", {
+            move: { frames: [11, 12], rate: 1/6}
+          });
+          Q.animations("king",{
+            move: { frames: [0, 2, 1], rate: 1/3}
+          });
+          Q.animations("king_flash",{
+            move:{ frames:[0, 3, 2, 3, 1], rate: 1/5}
+          });
+          Q.stageScene("StartScreen", 0);
+          //Q.stageScene("gameStats", 1);
+        });
+        
+        </script>
+    </body>
+</html>
